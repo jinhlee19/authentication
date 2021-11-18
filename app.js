@@ -2,7 +2,8 @@
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-
+// # 4 Encryption 
+const encrypt = require("mongoose-encryption");
 const app = express();
 
 app.use(express.static("public"));
@@ -12,11 +13,19 @@ app.use(express.urlencoded({ extended: true }));
 // # 1 Mongoose 연결
 mongoose.connect("mongodb://localhost:27017/userDB");
 
-// # 2
-const userSchema = {
-	email: String,
-	password: String,
-};
+// # 2 Schema 생성 -> #4 upgrade
+const userSchema = new mongoose.Schema ({
+    // simple javascript object -> mongoose schema class. 
+	email: String, //email < name으로 인한 오기, 오류 
+	password: String
+}); // 특이한 괄호구조
+
+// # 4 Encryption 
+const secret = "This is our little secret";
+// userSchema.plugin(encrypt, {secret: process.env.secret, requireAuthenticationCode: false, encryptedFields: ["password"]});
+userSchema.plugin(encrypt, {secret: secret, encryptedFileds: ["password"]}); //userSchema의 password에 연결
+// userSchema.plugin(encrypt, {secret: secret, }); 이걸로 하면 전체가 다  암호화됨. -> npm doc) only encript certain fields 
+
 const User = new mongoose.model("User", userSchema);
 
 app.get("/", function (req, res) {
@@ -29,6 +38,7 @@ app.get("/login", function (req, res) {
 app.get("/register", function (req, res) {
 	res.render("register");
 });
+// # 3 Username and Password 
 
 app.post("/register", function (req, res) {
 	const newUser = new User({
