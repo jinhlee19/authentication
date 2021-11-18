@@ -1,4 +1,5 @@
 //jshint esversion:6
+require('dotenv').config()
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
@@ -9,6 +10,9 @@ const app = express();
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
+
+console.log(process.env.API_KEY);
+
 
 // # 1 Mongoose 연결
 mongoose.connect("mongodb://localhost:27017/userDB");
@@ -21,12 +25,15 @@ const userSchema = new mongoose.Schema ({
 }); // 특이한 괄호구조
 
 // # 4 Encryption 
-const secret = "This is our little secret";
+// # 5 Env로 옮김
+// const secret = "This is our little secret";
 // userSchema.plugin(encrypt, {secret: process.env.secret, requireAuthenticationCode: false, encryptedFields: ["password"]});
-userSchema.plugin(encrypt, {secret: secret, encryptedFields: ["password"]}); //userSchema의 password에 연결
+userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]}); //userSchema의 password에 연결, .env연결
 // userSchema.plugin(encrypt, {secret: secret, }); 이걸로 하면 전체가 다  암호화됨. -> npm doc) only encript certain fields 
 
 const User = new mongoose.model("User", userSchema);
+
+
 
 app.get("/", function (req, res) {
 	res.render("home");
