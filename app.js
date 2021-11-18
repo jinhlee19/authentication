@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema ({
 // # 4 Encryption 
 const secret = "This is our little secret";
 // userSchema.plugin(encrypt, {secret: process.env.secret, requireAuthenticationCode: false, encryptedFields: ["password"]});
-userSchema.plugin(encrypt, {secret: secret, encryptedFileds: ["password"]}); //userSchema의 password에 연결
+userSchema.plugin(encrypt, {secret: secret, encryptedFields: ["password"]}); //userSchema의 password에 연결
 // userSchema.plugin(encrypt, {secret: secret, }); 이걸로 하면 전체가 다  암호화됨. -> npm doc) only encript certain fields 
 
 const User = new mongoose.model("User", userSchema);
@@ -59,7 +59,7 @@ app.post("/login", function (req, res) {
 	const password = req.body.password;
 
 	User.findOne({ email: username }, function (err, foundUser) {
-		//email은 저장된 db에서 username은 form에서 가져옴.
+		//1. email은 저장된 db에서 2. username은 바로 위의 const username <- form에서 가져옴.
 		if (err) {
 			console.log("the email cannot be found.");
 		} else {
