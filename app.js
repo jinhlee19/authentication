@@ -4,15 +4,17 @@ const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 // # 4 Encryption 
-const encrypt = require("mongoose-encryption");
+// const encrypt = require("mongoose-encryption");  //#6 hashing md5 설치하면서 없앰. 
+const md5 = require("md5");
 const app = express();
 
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
 
-console.log(process.env.API_KEY);
-
+//testing env, md5,
+// console.log(process.env.API_KEY);
+// console.log(md5('message'));
 
 // # 1 Mongoose 연결
 mongoose.connect("mongodb://localhost:27017/userDB");
@@ -27,8 +29,8 @@ const userSchema = new mongoose.Schema ({
 // # 4 Encryption 
 // # 5 Env로 옮김
 // const secret = "This is our little secret";
-// userSchema.plugin(encrypt, {secret: process.env.secret, requireAuthenticationCode: false, encryptedFields: ["password"]});
-userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]}); //userSchema의 password에 연결, .env연결
+// # 6 hashing md 5
+// userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]}); //userSchema의 password에 연결, .env연결
 // userSchema.plugin(encrypt, {secret: secret, }); 이걸로 하면 전체가 다  암호화됨. -> npm doc) only encript certain fields 
 
 const User = new mongoose.model("User", userSchema);
@@ -51,7 +53,7 @@ app.post("/register", function (req, res) {
 	const newUser = new User({
 		// userSchema로부터 받아옴
 		email: req.body.username, // email input name, password와 일치(받아옴)
-		password: req.body.password,
+		password: md5(req.body.password),
 	});
 	newUser.save(function (err) {
 		if (err) {
@@ -63,7 +65,7 @@ app.post("/register", function (req, res) {
 });
 app.post("/login", function (req, res) {
 	const username = req.body.username;
-	const password = req.body.password;
+	const password = md5(req.body.password);
 
 	User.findOne({ email: username }, function (err, foundUser) {
 		//1. email은 저장된 db에서 2. username은 바로 위의 const username <- form에서 가져옴.
