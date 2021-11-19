@@ -5,7 +5,9 @@ const ejs = require("ejs");
 const mongoose = require("mongoose");
 // # 4 Encryption 
 // const encrypt = require("mongoose-encryption");  //#6 hashing md5 설치하면서 없앰. 
-const md5 = require("md5");
+// # 5 Bcrypt 사용 Salting and Hashing - 기존 md5는 삭제 
+// const md5 = require("md5");
+const bcrypt = require("bcrypt");
 const app = express();
 
 app.use(express.static("public"));
@@ -15,6 +17,10 @@ app.use(express.urlencoded({ extended: true }));
 //testing env, md5,
 // console.log(process.env.API_KEY);
 // console.log(md5('message'));
+
+const saltRounds = 10;
+const myPlaintextPassword = 's0/\/\P4$$w0rD';
+const someOtherPlaintextPassword = 'not_bacon';
 
 // # 1 Mongoose 연결
 mongoose.connect("mongodb://localhost:27017/userDB");
@@ -50,22 +56,27 @@ app.get("/register", function (req, res) {
 // # 3 Username and Password 
 
 app.post("/register", function (req, res) {
-	const newUser = new User({
-		// userSchema로부터 받아옴
-		email: req.body.username, // email input name, password와 일치(받아옴)
-		password: md5(req.body.password),
-	});
-	newUser.save(function (err) {
-		if (err) {
-			console.log(err);
-		} else {
-			res.render("secrets"); // 유저가 성공적으로 db를 만들어야만 secret 으로 접속할 수 있다.
-		}
+	// adding bcrypt
+	bcrypt.hash(req.body.username, saltRounds, function(err, hash) {
+		// Store hash in your password DB.
+		const newUser = new User({
+			// userSchema로부터 받아옴
+			email: req.body.username, // email input name, password와 일치(받아옴)
+			password: hash
+		});
+		newUser.save(function (err) {
+			if (err) {
+				console.log(err);
+			} else {
+				res.render("secrets"); // 유저가 성공적으로 db를 만들어야만 secret 으로 접속할 수 있다.
+			}
+		});
 	});
 });
+
 app.post("/login", function (req, res) {
 	const username = req.body.username;
-	const password = md5(req.body.password);
+	const password = req.body.password;
 
 	User.findOne({ email: username }, function (err, foundUser) {
 		//1. email은 저장된 db에서 2. username은 바로 위의 const username <- form에서 가져옴.
@@ -73,9 +84,12 @@ app.post("/login", function (req, res) {
 			console.log("the email cannot be found.");
 		} else {
 			if (foundUser) {
-				if (foundUser.password === password) {
+				bcrypt.compare(password, foundUser.password, function(err, result) { //여기 어렵** //substitute bcrypt compare method HERE!!
+					//이제 여기에 true값을 주는데..app.post의 res와 구분짓기위해 윗줄은 result로 바꿔준다. 
+					if (result === true) { 
 					res.render("secrets");
-				}
+					}
+				});
 			}
 		}
 	});
