@@ -1,96 +1,117 @@
 //jshint esversion:6
-require('dotenv').config()
+require("dotenv").config();
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-// # 4 Encryption 
-// const encrypt = require("mongoose-encryption");  //#6 hashing md5 설치하면서 없앰. 
-// # 5 Bcrypt 사용 Salting and Hashing - 기존 md5는 삭제 
-// const md5 = require("md5");
-const bcrypt = require("bcrypt");
+// #1-1 const bcrypt = require("bcrypt"); require packages.
+const session = require("express-session");
+const passport = require("passport");
+//passport-local은 plm을 돌리기위해 필요로하지만 code내부에서 require할 필요는 없다. 
+const passportLocalMongoose = require("passport-local-mongoose");
+
 const app = express();
 
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
 
-//testing env, md5,
-// console.log(process.env.API_KEY);
-// console.log(md5('message'));
+// # 1-3 set up the session & initial configuration
+app.use(
+	session({
+		secret: "placeanystring",
+		resave: false,
+		saveUninitialized: false,
+	})
+);
+
+// # 1-4 (인증을 위해서) 패스포트 패키지를 사용, 1-3에 이어서 패스포트에서 세션을 사용. doc > configuare 확인
+app.use(passport.initialize());
+app.use(passport.session());
 
 const saltRounds = 10;
-const myPlaintextPassword = 's0/\/\P4$$w0rD';
-const someOtherPlaintextPassword = 'not_bacon';
+const myPlaintextPassword = "s0//P4$$w0rD";
+const someOtherPlaintextPassword = "not_bacon";
 
-// # 1 Mongoose 연결
 mongoose.connect("mongodb://localhost:27017/userDB");
 
-// # 2 Schema 생성 -> #4 upgrade
-const userSchema = new mongoose.Schema ({
-    // simple javascript object -> mongoose schema class. 
-	email: String, //email < name으로 인한 오기, 오류 
-	password: String
-}); // 특이한 괄호구조
+const userSchema = new mongoose.Schema({
+	email: String, //email < name으로 인한 오기, 오류
+	password: String,
+});
 
-// # 4 Encryption 
-// # 5 Env로 옮김
-// const secret = "This is our little secret";
-// # 6 hashing md 5
-// userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]}); //userSchema의 password에 연결, .env연결
-// userSchema.plugin(encrypt, {secret: secret, }); 이걸로 하면 전체가 다  암호화됨. -> npm doc) only encript certain fields 
+// # 1-5 플러그인 연결 - hasing and salting 후, 사용자 id와 pw 저장하기.
+userSchema.plugin(passportLocalMongoose); // plugin 연결
+const User = new mongoose.model("User", userSchema); //user mongoose Model 
 
-const User = new mongoose.model("User", userSchema);
-
-
+// # 1-6 
+// CHANGE: USE "createStrategy" INSTEAD OF "authenticate" 
+// passport-local-mongoose npm doc 참조 - simplified passport/passport-local configuration.
+passport.use(User.createStrategy());
+//strategy 아래로 serialize 위치.
+passport.serializeUser(User.serializeUser()); // 사용자정보가 있는 cookie를 생성.
+passport.deserializeUser(User.deserializeUser()); // 인증을 위해서 cookie의 사용자 정보를 연다.
+// 1-6 end
 
 app.get("/", function (req, res) {
 	res.render("home");
 });
-
 app.get("/login", function (req, res) {
 	res.render("login");
 });
+// #2-2 secret
+app.get("/secrets", function (req, res) {
+	if (req.isAuthenticated()) {
+		res.render("secrets");
+	} else {
+		res.redirect("/login");
+	}
+});
+// # 2-4  logout
+app.get("/logout", function (req, res) {
+	req.logout();
+	res.redirect("/");
+});
+
 app.get("/register", function (req, res) {
 	res.render("register");
 });
-// # 3 Username and Password 
 
+// #1-2 app.post -reg, login 삭제
+// #2-1 register Section 
+// passport-local-mongoose 문서 참조 -> User.register는 plm패키지에서 가져옴.
 app.post("/register", function (req, res) {
-	// adding bcrypt
-	bcrypt.hash(req.body.username, saltRounds, function(err, hash) {
-		// Store hash in your password DB.
-		const newUser = new User({
-			// userSchema로부터 받아옴
-			email: req.body.username, // email input name, password와 일치(받아옴)
-			password: hash
-		});
-		newUser.save(function (err) {
+	// 몽구스가 직접 처리하지 않고 plm패키지를 통해 처리. plm이 중간자 역할할 수 있도록 해준다. 
+	// 자바스크립트 객체이므로 username은 {}컬리 브레이스로 감싸준다.
+	// 비밀번호를 연결해 준 후, 콜백함수를 넣어서 인증 후의 처리. err 또는 패스.
+	User.register(
+		{ username: req.body.username }, req.body.password, function (err, user) {
 			if (err) {
 				console.log(err);
+				res.redirect("/register");
 			} else {
-				res.render("secrets"); // 유저가 성공적으로 db를 만들어야만 secret 으로 접속할 수 있다.
-			}
-		});
-	});
-});
-
-app.post("/login", function (req, res) {
-	const username = req.body.username;
-	const password = req.body.password;
-
-	User.findOne({ email: username }, function (err, foundUser) {
-		//1. email은 저장된 db에서 2. username은 바로 위의 const username <- form에서 가져옴.
-		if (err) {
-			console.log("the email cannot be found.");
-		} else {
-			if (foundUser) {
-				bcrypt.compare(password, foundUser.password, function(err, result) { //여기 어렵** //substitute bcrypt compare method HERE!!
-					//이제 여기에 true값을 주는데..app.post의 res와 구분짓기위해 윗줄은 result로 바꿔준다. 
-					if (result === true) { 
-					res.render("secrets");
-					}
+				passport.authenticate("local")(req, res, function () { 
+					//앞구문~ local")까지 성공하면 -> 괄호의 req, res, 콜백함수까지 pass in하게된다. (timestamp: 17:40)
+					res.redirect("/secrets");
 				});
 			}
+		}
+	);
+});
+// 2-3 login
+app.post("/login", function (req, res) {
+	const user = new User({
+		username: req.body.username,
+		password: req.body.password,
+	});
+	//req.login <- #passport
+	req.login(user, function (err) {
+		if (err) {
+			console.log(err);
+		} else { 
+			passport.authenticate("local")(req, res, function () { 
+			res.redirect("/secrets"); 
+			// 인증이 되었는지 확인한 후에 쿠키를 들고 /secrets으로 가면 쿠키를 확인해서 또다시 인증을 재확인하고 secrets를 보여준다.
+			});
 		}
 	});
 });
