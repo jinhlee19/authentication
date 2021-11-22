@@ -8,7 +8,7 @@ const session = require("express-session");
 const passport = require("passport");
 //passport-local은 plm을 돌리기위해 필요로하지만 code내부에서 require할 필요는 없다.
 const passportLocalMongoose = require("passport-local-mongoose");
-// #3-1 passport google strategy 
+// #3-1 passport google strategy
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 // #3-4 findOrCreate
 const findOrCreate = require("mongoose-findorcreate");
@@ -41,9 +41,9 @@ mongoose.connect("mongodb://localhost:27017/userDB");
 const userSchema = new mongoose.Schema({
 	email: String, //email < name으로 인한 오기, 오류
 	password: String,
-	// #3-8 GoogleId 
-	googleId: String
-
+	// #3-8 GoogleId
+	googleId: String,
+	secret: String,
 });
 
 // #1-5 플러그인 연결 - hasing and salting 후, 사용자 id와 pw 저장하기.
@@ -63,15 +63,15 @@ passport.use(User.createStrategy());
 // passport.deserializeUser(User.deserializeUser()); // 인증을 위해서 cookie의 사용자 정보를 연다.
 
 // # 3-6 passport-local-mongoose의 serialize & deserialize 제거 후, passport의 config로 replace, local
-passport.serializeUser(function(user, done) {
+passport.serializeUser(function (user, done) {
 	done(null, user.id);
-  });
-  
-  passport.deserializeUser(function(id, done) {
-	User.findById(id, function(err, user) {
-	  done(err, user);
+});
+
+passport.deserializeUser(function (id, done) {
+	User.findById(id, function (err, user) {
+		done(err, user);
 	});
-  });
+});
 //
 
 // #3-2 GooleStartegy serialize 다음에 배치
@@ -82,11 +82,11 @@ passport.use(
 			clientSecret: process.env.CLIENT_SECRET,
 			callbackURL: "http://localhost:3000/auth/google/secrets",
 			// #3-7 Google+ deprecation
-			userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+			userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
 		},
 		function (accessToken, refreshToken, profile, cb) {
 			console.log(profile);
-			// #3-4 findOrCreate -> npm install 
+			// #3-4 findOrCreate -> npm install
 			User.findOrCreate({ googleId: profile.id }, function (err, user) {
 				return cb(err, user);
 			});
@@ -117,14 +117,29 @@ app.get("/login", function (req, res) {
 	res.render("login");
 });
 // #2-2 secret
+// #4-2 "mongodb field not null" search
 app.get("/secrets", function (req, res) {
+	User.find({ secret: { $ne: null } }, function (err, foundUsers) {
+		if (err) {
+			console.log(err);
+		} else {
+			if (foundUsers) {
+				res.render("secrets", { usersWithSecrets: foundUsers });
+			}
+		}
+	});
+});
+
+// #4-1 adding submit page
+app.get("/submit", function (req, res) {
 	if (req.isAuthenticated()) {
-		res.render("secrets");
+		res.render("submit");
 	} else {
 		res.redirect("/login");
 	}
 });
-// # 2-4 logout
+
+// #2-4 logout
 app.get("/logout", function (req, res) {
 	req.logout();
 	res.redirect("/");
@@ -172,6 +187,24 @@ app.post("/login", function (req, res) {
 				res.redirect("/secrets");
 				// 인증이 되었는지 확인한 후에 쿠키를 들고 /secrets으로 가면 쿠키를 확인해서 또다시 인증을 재확인하고 secrets를 보여준다.
 			});
+		}
+	});
+});
+
+app.post("/submit", function (req, res) {
+	const submittedSecret = req.body.secret;
+	console.log(req.user.id);
+	User.findById(req.user.id, function (err, foundUser) {
+		if (err) {
+			console.log(err);
+		} else {
+			if (foundUser) {
+				//foundUser의 secret필드에 submittedSecret넣고 세이브, 완료가 되면 secret페이지에 넣기.
+				foundUser.secret = submittedSecret;
+				foundUser.save(function () {
+					res.redirect("/secrets");
+				});
+			}
 		}
 	});
 });
